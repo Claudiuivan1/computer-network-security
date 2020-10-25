@@ -1,3 +1,8 @@
+""" AES128 class:
+        This class gives you the power of AES128 encryption standard with 5 different operation modes
+        :param key: Secret key
+        :param mode: Operation mode (ECB, CBC, CFB, OFB, CTR) """
+
 class AES128( object ):
     def __init__( self, key, mode ):
         self.block_size = 128
@@ -6,7 +11,7 @@ class AES128( object ):
         self.nr = 10
         self.mode = mode
         self.key = self.splitKey( key )
-        print(self.key)
+        self.iv = ['0x20', '0xc7', '0x04', '0x40', '0xac', '0x40', '0x0d', '0xba', '0x84', '0x06', '0x57', '0x00', '0x74', '0xf2', '0xe2', '0x2a']#self.generateIv( key )
         
         self.sbox = [
             0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -49,8 +54,9 @@ class AES128( object ):
         
         self.w = self.keyExpansion( key )
         
-        self.splitted = [['0x32', '0x43', '0xf6', '0xa8', '0x88', '0x5a', '0x30', '0x8d', '0x31', '0x31', '0x98', '0xa2', '0xe0', '0x37', '0x07', '0x34']]
-        self.splitted_encrypted = []
+        self.splitted = [['0x32', '0x43', '0xf6', '0xa8', '0x88', '0x5a', '0x30', '0x8d', '0x31', '0x31', '0x98', '0xa2', '0xe0', '0x37', '0x07', '0x34'], 
+                        ['0x32', '0x43', '0xf6', '0xa8', '0x88', '0x5a', '0x30', '0x8d', '0x31', '0x31', '0x98', '0xa2', '0xe0', '0x37', '0x07', '0x34']]
+        self.cyphertext = []
         
                 
     def splitText( self, string ): # Split plaintext in blocks of specified size
@@ -70,14 +76,40 @@ class AES128( object ):
         return out
         
         
+    def generateIv( self, key ):
+        print()
+    
+        
     def encrypt( self ):
-        for i in self.splitted:
-            block = self.encryptBlock( i )
-            #if( self.mode == 'ECB' ):
-            #    block = self.xor( block, self.key )
-            self.splitted_encrypted.append( block )
+        for i in range( 0, len( self.splitted ) ):
+            if( self.mode == 'ECB' ):
+                block = self.splitted[i]
+                block = self.encryptBlock( block )
+            elif( self.mode == 'CBC' ):
+                block = self.splitted[i]
+                if( i == 0 ):
+                    block = self.xor( block, self.iv )
+                else:
+                    block = self.xor( block, self.cyphertext[i-1] )
+                block = self.encryptBlock( block )
+            elif( self.mode == 'CFB' ):
+                if( i == 0 ):
+                    block = [] + self.iv
+                else:
+                    block = self.cyphertext[i-1]
+                block = self.encryptBlock( block )
+                block = self.xor( block, self.splitted[i] )
+            elif( self.mode == 'OFB' ):
+                if( i == 0 ):
+                    block = [] + self.iv
+                else:
+                    block = temp
+                block = self.encryptBlock( block )
+                temp = block
+                block = self.xor( block, self.splitted[i] )
+            self.cyphertext.append( block )
             # I need to add different cyphers and encode the blocks
-        return self.splitted_encrypted
+        return self.cyphertext
         
         
     def encryptBlock( self, block ):
@@ -209,7 +241,7 @@ class AES128( object ):
         out = [] * 16
        
 
-a = AES128('2b7e151628aed2a6abf7158809cf4f3c', 'ECB')
+a = AES128('2b7e151628aed2a6abf7158809cf4f3c', 'CBC')
 #a.splitText('3243f6a8885a308d313198a2e0370734')
 print(a.encrypt())
 print(a.splitted)
