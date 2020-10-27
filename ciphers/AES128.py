@@ -2,6 +2,8 @@
         This class gives you the power of AES128 encryption standard with 5 different operation modes
         :param key: Secret key
         :param mode: Operation mode (ECB, CBC, CFB, OFB, CTR) """
+        
+import random
 
 class AES128( object ):
     def __init__( self, key, mode ):
@@ -11,7 +13,7 @@ class AES128( object ):
         self.nr = 10
         self.mode = mode
         self.key = self.splitKey( key )
-        self.iv = ['0x20', '0xc7', '0x04', '0x40', '0xac', '0x40', '0x0d', '0xba', '0x84', '0x06', '0x57', '0x00', '0x74', '0xf2', '0xe2', '0x2a']#self.generateIv( key )
+        self.iv = self.generateIv()
         
         self.sbox = [
             0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -54,8 +56,7 @@ class AES128( object ):
         
         self.w = self.keyExpansion( key )
         
-        self.splitted = [['0x32', '0x43', '0xf6', '0xa8', '0x88', '0x5a', '0x30', '0x8d', '0x31', '0x31', '0x98', '0xa2', '0xe0', '0x37', '0x07', '0x34'], 
-                        ['0x32', '0x43', '0xf6', '0xa8', '0x88', '0x5a', '0x30', '0x8d', '0x31', '0x31', '0x98', '0xa2', '0xe0', '0x37', '0x07', '0x34']]
+        self.splitted = []
         self.cyphertext = []
         
                 
@@ -76,8 +77,11 @@ class AES128( object ):
         return out
         
         
-    def generateIv( self, key ):
-        print()
+    def generateIv( self ):
+        iv = []
+        for i in range( 0, 16 ):
+            iv.append( hex( random.randint(0, 255) ) )
+        return iv
     
         
     def encrypt( self ):
@@ -107,9 +111,17 @@ class AES128( object ):
                 block = self.encryptBlock( block )
                 temp = block
                 block = self.xor( block, self.splitted[i] )
+            elif( self.mode == 'CTR' ):
+                if( i == 0 ):
+                    temp = [] + self.iv
+                else:
+                    self.incrementCounter()
+                block = [] + self.iv
+                block = self.encryptBlock( block )
+                block = self.xor( block, self.splitted[i] )
+            if( self.mode == 'CTR' ):
+                self.iv = [] + temp
             self.cyphertext.append( block )
-            # I need to add different cyphers and encode the blocks
-        return self.cyphertext
         
         
     def encryptBlock( self, block ):
@@ -150,6 +162,14 @@ class AES128( object ):
                 block[8], block[13], block[2], block[7], 
                 block[12], block[1], block[6], block[11] ]
         return out 
+        
+    
+    def incrementCounter( self ):
+        i = 15
+        while( int( self.iv[i], 16 ) == 255 ):
+            self.iv[i] = hex( 0 )
+            i-= 1
+        self.iv[i] = hex( int( self.iv[i], 16 ) + 1 )        
         
         
     def mixColumns( self, block ): # Combinazione dei byte con un'operazione lineare, i byte vengono trattati una colonna per volta.
@@ -237,11 +257,26 @@ class AES128( object ):
             b >>= 1
         return p
         
-    def keySplit( key ):
-        out = [] * 16
+        
+    def setPlaintext( self, plaintext ):
+        self.splitted = self.splitText( plaintext )
+        
+        
+    def getCyphertext( self ):
+        print( "IV: ", "".join( map( self.convertHex, self.iv ) ) )
+        print( "Key: ", "".join( map( self.convertHex, self.key ) ) )
+        print( "Cyphertext: ", "".join( map( self.convertHex, map( "".join, self.cyphertext ) ) ) )
+ 
+ 
+    def convertHex( self, str ):
+        out = str.replace( "0x", "" )
+        if( len( out ) == 1 ):
+            return "0" + out
+        else:
+            return out
        
 
-a = AES128('2b7e151628aed2a6abf7158809cf4f3c', 'CBC')
-#a.splitText('3243f6a8885a308d313198a2e0370734')
-print(a.encrypt())
-print(a.splitted)
+a = AES128( '2b7e151628aed2a6abf7158809cf4f3c', 'CTR' )
+a.setPlaintext( '3243f6a8885a308d313198a2e03707343243f6a8885a308d313198a2e0370734' )
+a.encrypt()
+a.getCyphertext()
