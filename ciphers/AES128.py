@@ -259,7 +259,7 @@ class AES128( object ):
                 if( i == 0 ):
                     block = self.xor( block, self.iv )
                 else:
-                    block = self.xor( block, plaintext[i-1] )
+                    block = self.xor( block, ciphertext[i-1] )
             elif( self.mode == 'CFB' ):
                 if( i == 0 ):
                     block = [] + self.iv
