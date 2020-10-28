@@ -12,7 +12,7 @@ class AES128( object ):
         self.nk = 4
         self.nr = 10
         self.mode = mode
-        self.key = self.splitKey( key )
+        self.key = ['0x2b', '0x7e', '0x15', '0x16', '0x28', '0xae', '0xd2', '0xa6', '0xab', '0xf7', '0x15', '0x88', '0x09', '0xcf', '0x4f', '0x3c']#self.splitKey( key )
         self.iv = self.generateIv()
         
         self.sbox = [
@@ -89,12 +89,44 @@ class AES128( object ):
     def splitText( self, string ): # Split plaintext in blocks of specified size
         out = []
         subarray = []
-        for i in range( len(string) // 2 ):
+        for i in range( len( string ) // 2 ):
             subarray.append( "0x" + string[i*2:i*2+2] )
             if( (i+1) % 16 == 0 ):
-                out.append(subarray)
+                out.append( subarray )
                 subarray = []
+        if( len( subarray ) > 0 ):
+            out.append(subarray)
         return out
+        
+        
+    def pad( self, text, mode ): 
+        n = 16 - len( text[-1] )
+        if( mode == 'PKCS' ):
+            if( n > 0 ):
+                for i in range( n ):
+                    text[-1].append( hex( n ) )
+            else:
+                text.append( ["0x10"] * 16 )
+        elif( mode == 'ZERO' ):
+            if( n > 0 ):
+                for i in range( n ):
+                    text[-1].append( "0x00" )
+        return text
+        
+    def unpad( self, text, mode ): 
+        n = 16 - int( text[-1][-1], 16 )
+        if( mode == 'PKCS' ):
+            if( n > 0 ):
+                for i in range( 16 - n ):
+                    text[-1].pop()
+            else:
+                text.pop()
+        elif( mode == 'ZERO' ):
+            if( n > 0 ):
+                for i in range( n ):
+                    text[-1].pop()
+        return text
+        
         
     def splitKey( self, string ): # Split key in blocks of specified size
         out = []
@@ -108,16 +140,19 @@ class AES128( object ):
         for i in range( 0, 16 ):
             iv.append( hex( random.randint(0, 255) ) )
         return iv
-    
+        
         
     def encrypt( self ):
         ciphertext = []
-        for i in range( 0, len( self.splitted ) ):
+        plaintext = [] + self.splitted
+        plaintext = self.pad( plaintext, 'PKCS' )
+        
+        for i in range( 0, len( plaintext ) ):
             if( self.mode == 'ECB' ):
-                block = self.splitted[i]
+                block = plaintext[i]
                 block = self.encryptBlock( block )
             elif( self.mode == 'CBC' ):
-                block = self.splitted[i]
+                block = plaintext[i]
                 if( i == 0 ):
                     block = self.xor( block, self.iv )
                 else:
@@ -129,7 +164,7 @@ class AES128( object ):
                 else:
                     block = ciphertext[i-1]
                 block = self.encryptBlock( block )
-                block = self.xor( block, self.splitted[i] )
+                block = self.xor( block, plaintext[i] )
             elif( self.mode == 'OFB' ):
                 if( i == 0 ):
                     block = [] + self.iv
@@ -137,7 +172,7 @@ class AES128( object ):
                     block = temp
                 block = self.encryptBlock( block )
                 temp = block
-                block = self.xor( block, self.splitted[i] )
+                block = self.xor( block, plaintext[i] )
             elif( self.mode == 'CTR' ):
                 if( i == 0 ):
                     temp = [] + self.iv
@@ -145,10 +180,11 @@ class AES128( object ):
                     self.incrementCounter()
                 block = [] + self.iv
                 block = self.encryptBlock( block )
-                block = self.xor( block, self.splitted[i] )
+                block = self.xor( block, plaintext[i] )
             if( self.mode == 'CTR' ):
                 self.iv = [] + temp
             ciphertext.append( block )
+            
         self.ciphertext = [] + ciphertext
         
         
@@ -211,12 +247,14 @@ class AES128( object ):
         
     def decrypt( self ):
         plaintext = []
-        for i in range( 0, len( self.splitted ) ):
+        ciphertext = [] + self.ciphertext
+        
+        for i in range( 0, len( ciphertext ) ):
             if( self.mode == 'ECB' ):
-                block = self.splitted[i]
+                block = ciphertext[i]
                 block = self.decryptBlock( block )
             elif( self.mode == 'CBC' ):
-                block = self.splitted[i]
+                block = ciphertext[i]
                 block = self.decryptBlock( block )
                 if( i == 0 ):
                     block = self.xor( block, self.iv )
@@ -226,17 +264,17 @@ class AES128( object ):
                 if( i == 0 ):
                     block = [] + self.iv
                 else:
-                    block = self.ciphertext[i-1]
-                block = self.decryptBlock( block )
-                block = self.xor( block, self.ciphertext[i] )
+                    block = ciphertext[i-1]
+                block = self.encryptBlock( block )
+                block = self.xor( block, ciphertext[i] )
             elif( self.mode == 'OFB' ):
                 if( i == 0 ):
                     block = [] + self.iv
                 else:
                     block = temp
-                block = self.decryptBlock( block )
+                block = self.encryptBlock( block )
                 temp = block
-                block = self.xor( block, self.ciphertext[i] )
+                block = self.xor( block, ciphertext[i] )
             elif( self.mode == 'CTR' ):
                 if( i == 0 ):
                     temp = [] + self.iv
@@ -248,22 +286,26 @@ class AES128( object ):
             if( self.mode == 'CTR' ):
                 self.iv = [] + temp
             plaintext.append( block )
-        self.plaintext = [] + plaintext
+            
+        plaintext = self.unpad( plaintext, 'PKCS' )
+        self.splitted = [] + plaintext
         
         
     def decryptBlock( self, block ):
-        key = self.w[0] + self.w[1] + self.w[2] + self.w[3]
+        key = self.w[(self.nr+1)*self.nb-4] + self.w[(self.nr+1)*self.nb-3] + self.w[(self.nr+1)*self.nb-2] + self.w[(self.nr+1)*self.nb-1]
         block = self.addRoundKey( block, key )
         for i in range( 1, self.nr ):
-            block = self.invSubBytes( block )
             block = self.invShiftRows( block )
-            block = self.invMixColumns( block )
-            key = self.w[i*4] + self.w[i*4+1] + self.w[i*4+2] + self.w[i*4+3]
+            block = self.invSubBytes( block )
+            key = self.w[(self.nr+1)*self.nb-i*4-4] + self.w[(self.nr+1)*self.nb-i*4-3] + self.w[(self.nr+1)*self.nb-i*4-2] + self.w[(self.nr+1)*self.nb-i*4-1]
+            block = list( map( hex, block ) )
             block = self.addRoundKey( block, key )
-        block = self.invSubBytes( block )
+            block = list( map( lambda x: int( x, 16 ), block ) )
+            block = self.invMixColumns( block )
         block = self.invShiftRows( block )
+        block = self.invSubBytes( block )
         block = list( map( hex, block ) )
-        key = self.w[(i+1)*4] + self.w[(i+1)*4+1] + self.w[(i+1)*4+2] + self.w[(i+1)*4+3]
+        key = self.w[0] + self.w[1] + self.w[2] + self.w[3]
         block = self.addRoundKey( block, key )
         return block
         
@@ -284,10 +326,10 @@ class AES128( object ):
             
         
     def invShiftRows( self, block ): # Spostamento dei byte di un certo numero di posizioni dipendente dalla riga di appartenenza.
-        out = [ block[0], block[1], block[2], block[3], 
-                block[7], block[4], block[5], block[6], 
-                block[10], block[11], block[8], block[9], 
-                block[13], block[14], block[15], block[12] ]
+        out = [ block[0], block[13], block[10], block[7], 
+                block[4], block[1], block[14], block[11], 
+                block[8], block[5], block[2], block[15], 
+                block[12], block[9], block[6], block[3] ]
         return out   
         
         
@@ -379,6 +421,10 @@ class AES128( object ):
     def byteXor( self, s1, s2 ):
         return hex( s1 ^ s2 )
         
+    
+    def setIv( self, iv ):
+        self.iv = self.splitKey( iv )
+       
         
     def setPlaintext( self, plaintext ):
         self.splitted = self.splitText( plaintext )
@@ -389,30 +435,29 @@ class AES128( object ):
         
         
     def getCiphertext( self ):
-        print( "IV: ", "".join( map( self.convertHex, self.iv ) ) )
-        print( "Key: ", "".join( map( self.convertHex, self.key ) ) )
-        print( "Ciphertext: ", "".join( map( self.convertHex, map( "".join, self.ciphertext ) ) ) )
+        print( "IV: ", "".join( self.convertHex( self.iv ) ) )
+        print( "Key: ", "".join( self.convertHex( self.key ) ) )
+        ciphertext = []
+        for i in self.ciphertext:
+            ciphertext.append( self.convertHex( i ) )
+        print( "Ciphertext: ", "".join( map( "".join, ciphertext ) ) )
         
         
     def getPlaintext( self ):
-        print( "IV: ", "".join( map( self.convertHex, self.iv ) ) )
-        print( "Key: ", "".join( map( self.convertHex, self.key ) ) )
-        print( "Plaintext: ", "".join( map( self.convertHex, map( "".join, self.splitted ) ) ) )
+        print( "IV: ", "".join( self.convertHex( self.iv ) ) )
+        print( "Key: ", "".join( self.convertHex( self.key ) ) )
+        splitted = []
+        for i in self.splitted:
+            splitted.append( self.convertHex( i ) )
+        print( "Plaintext: ", "".join( map( "".join, splitted ) ) )
  
  
-    def convertHex( self, str ):
-        out = str.replace( "0x", "" )
-        if( len( out ) == 1 ):
-            return "0" + out
-        else:
-            return out
-       
-
-a = AES128( '2b7e151628aed2a6abf7158809cf4f3c', 'CTR' )
-a.setPlaintext( '3243f6a8885a308d313198a2e03707343243f6a8885a308d313198a2e0370734' )
-a.encrypt()
-a.getCiphertext()
-
-a.setCiphertext( '3243f6a8885a308d313198a2e03707343243f6a8885a308d313198a2e0370734' )
-a.decrypt()
-a.getPlaintext()
+    def convertHex( self, block ):
+        out = []
+        for i in block:
+            c = i.replace( "0x", "" )
+            if( len( c ) < 2 ):
+                out.append( "0" + c )
+            else:
+                out.append( c )
+        return out
